@@ -1,0 +1,125 @@
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+
+# إعداد التحويلات
+train_datagen = ImageDataGenerator(
+    rescale=1.0/255,         # إعادة ضبط القيم بين 0 و 1
+    rotation_range=10,       # تدوير الصور بشكل عشوائي
+    width_shift_range=0.1,   # إزاحة العرض بشكل عشوائي
+    height_shift_range=0.1,  # إزاحة الطول بشكل عشوائي
+    zoom_range=0.1,          # تكبير أو تصغير
+    horizontal_flip=True,    # عكس الصور أفقيًا
+    fill_mode='nearest'      # تعبئة البكسلات عند التحويل
+)
+
+validation_datagen = ImageDataGenerator(rescale=1.0/255)
+
+# تحميل الصور
+train_generator = train_datagen.flow_from_directory(
+    'data/train',
+    target_size=(224, 224),  # تغيير حجم الصور لتتناسب مع النموذج
+    batch_size=32,
+    class_mode='categorical' # لأن لدينا أكثر من فئة
+)
+
+validation_generator = validation_datagen.flow_from_directory(
+    'data/validation',
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='categorical'
+)
+
+
+from tensorflow.keras.applications import ResNet50
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Flatten, Dropout, GlobalAveragePooling2D
+
+# تحميل نموذج ResNet50 مع استبعاد الطبقات العلوية (عدم تضمين طبقة الإخراج الأصلية)
+base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+
+# تجميد الطبقات الأساسية
+base_model.trainable = False
+
+# بناء النموذج النهائي
+model = Sequential([
+    base_model,
+    GlobalAveragePooling2D(),  # لتقليل الأبعاد بعد الطبقات الالتفافية
+    Dense(128, activation='relu'),
+    Dropout(0.5),              # تقليل الإفراط في التكيف
+    Dense(5, activation='softmax')  # 5 فئات (0-4)
+])
+
+model.compile(
+    optimizer='adam',
+    loss='categorical_crossentropy',  # لأننا نستخدم التشفير One-Hot Encoding
+    metrics=['accuracy']
+)
+
+use data
+
+history = model.fit(
+    train_generator,
+    epochs=20,                     # عدد الدورات التدريبية
+    validation_data=validation_generator,
+    steps_per_epoch=train_generator.samples // train_generator.batch_size,
+    validation_steps=validation_generator.samples // validation_generator.batch_size
+)
+
+
+4. Fine-tuning (ضبط النموذج):
+
+# فك تجميد الطبقات الأساسية
+base_model.trainable = True
+
+# إعادة تجميع النموذج بخفض معدل التعلم
+model.compile(
+    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
+    loss='categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+history_fine = model.fit(
+    train_generator,
+    epochs=10,
+    validation_data=validation_generator,
+    steps_per_epoch=train_generator.samples // train_generator.batch_size,
+    validation_steps=validation_generator.samples // validation_generator.batch_size
+)
+
+
+5. تقييم النموذج:
+test_generator = validation_datagen.flow_from_directory(
+    'data/test',
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode='categorical'
+)
+test_loss, test_acc = model.evaluate(test_generator)
+print(f"Test Accuracy: {test_acc:.2f}")
+
+. التنبؤ:
+from tensorflow.keras.preprocessing import image
+import numpy as np
+
+img_path = 'path_to_image.jpg'
+img = image.load_img(img_path, target_size=(224, 224))
+img_array = image.img_to_array(img) / 255.0
+img_array = np.expand_dims(img_array, axis=0)
+
+prediction = model.predict(img_array)
+predicted_class = np.argmax(prediction)
+print(f"Predicted Class: {predicted_class}")
+
+
+
+
+تحويل الالوان
+from tensorflow.keras.preprocessing.image import load_img, img_to_array
+import numpy as np
+
+# تغيير الحجم وإعادة ضبط القيم
+from tensorflow.keras.utils import load_img, img_to_array
+
+img_preprocessed = load_img(img_path, target_size=(224, 224), color_mode='rgb')  # استخدام color_mode='grayscale' إذا كان مطلوب
+img_array = img_to_array(img_preprocessed) / 255.0
+img_array = np.expand_dims(img_array, axis=0)  # إضافة بُعد للدفعات
+print(f"Processed Image Shape: {img_array.shape}")
